@@ -1,0 +1,8 @@
+build.sh
+Dockerfile
+LICENSE
+README.md
+.DS_Store
+.git/
+.gitignore
+.vscode/
