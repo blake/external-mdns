@@ -18,19 +18,28 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 
-	"github.com/blake/external-mdns/sources"
-	externalMDNSTypes "github.com/blake/external-mdns/types"
-	"github.com/flix-tech/k8s-mdns/mdns"
-	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
+	"github.com/blake/external-mdns/resource"
+	"github.com/blake/external-mdns/source"
+	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/informers"
 )
+
+type k8sSource []string
+
+func (s *k8sSource) String() string {
+	return fmt.Sprint(*s)
+}
+
+func (s *k8sSource) Set(value string) error {
+	switch value {
+	case "ingress", "service":
+		*s = append(*s, value)
+	}
+	return nil
+}
 
 /*
 The following functions were obtained from
@@ -68,62 +77,21 @@ func lookupEnvOrInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
-func homeDir() string {
-	if h := os.Getenv("HOME"); h != "" {
-		return h
-	}
-
-	// Windows
-	return os.Getenv("USERPROFILE")
-}
-
-type source []string
-
-func (s *source) String() string {
-	return fmt.Sprint(*s)
-}
-
-func (s *source) Set(value string) error {
-	switch value {
-	case "ingress", "service":
-		*s = append(*s, value)
-	}
-	return nil
-}
-
-func mustPublish(rr string) {
-	if err := mdns.Publish(rr); err != nil {
-		log.Fatalf(`Unable to publish record "%s": %v`, rr, err)
-	}
-}
-
-func mustUnPublish(rr string) {
-	if err := mdns.UnPublish(rr); err != nil {
-		log.Fatalf(`Unable to publish record "%s": %v`, rr, err)
-	}
-}
-
 var (
-	master            = ""
-	namespace         = ""
-	defaultNamespace  = "default"
-	test              = flag.Bool("test", false, "testing mode, no connection to k8s")
-	sourceFlag        source
-	kubeconfigDefault string
-	kubeconfig        string
-	publishInternal   = flag.Bool("publish-internal-services", false, "Publish DNS records for ClusterIP services (optional)")
-	recordTTL         = 120
+	master           = ""
+	namespace        = ""
+	defaultNamespace = "default"
+	test             = flag.Bool("test", false, "testing mode, no connection to k8s")
+	sourceFlag       k8sSource
+	kubeconfig       string
+	publishInternal  = flag.Bool("publish-internal-services", false, "Publish DNS records for ClusterIP services (optional)")
+	recordTTL        = 120
 )
 
 func main() {
-	if home := homeDir(); home != "" {
-		kubeconfigDefault = filepath.Join(home, ".kube", "config")
-	} else {
-		kubeconfigDefault = ""
-	}
 
 	// Kubernetes options
-	flag.StringVar(&kubeconfig, "kubeconfig", lookupEnvOrString("EXTERNAL_MDNS_KUBECONFIG", kubeconfigDefault), "(optional) Absolute path to the kubeconfig file")
+	flag.StringVar(&kubeconfig, "kubeconfig", lookupEnvOrString("EXTERNAL_MDNS_KUBECONFIG", kubeconfigPath()), "(optional) Absolute path to the kubeconfig file")
 	flag.StringVar(&master, "master", lookupEnvOrString("EXTERNAL_MDNS_MASTER", master), "URL to Kubernetes master")
 
 	// External-mDNS options
@@ -135,8 +103,8 @@ func main() {
 	flag.Parse()
 
 	if *test {
-		mustPublish("router.local. 60 IN A 192.168.1.254")
-		mustPublish("254.1.168.192.in-addr.arpa. 60 IN PTR router.local.")
+		publishRecord("router.local. 60 IN A 192.168.1.254")
+		publishRecord("254.1.168.192.in-addr.arpa. 60 IN PTR router.local.")
 
 		select {}
 	}
@@ -150,71 +118,43 @@ func main() {
 	// Print parsed configuration
 	log.Printf("app.config %v\n", getConfig(flag.CommandLine))
 
-	// Use Kubernetes service account for authentication when running in-cluster
-	var config *rest.Config
-	if _, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/token"); !os.IsNotExist(err) {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			panic(err.Error())
-		}
-		// Use kubeconfig for authentication when running out-of-cluster
-	} else {
-		// Uses the current context in kubeconfig
-		config, err = clientcmd.BuildConfigFromFlags(master, kubeconfig)
-		if err != nil {
-			log.Fatalln("Failed to read kubeconfig:", err)
-		}
-	}
-
-	// creates the k8sClient
-	k8sClient, err := kubernetes.NewForConfig(config)
+	k8sClient, err := newK8sClient()
 	if err != nil {
 		log.Fatalln("Failed to create Kubernetes client:", err)
 	}
 
-	resources := make(chan externalMDNSTypes.Resource)
+	notifyMdns := make(chan resource.Resource)
+	stopper := make(chan struct{})
+	defer close(stopper)
+	defer runtime.HandleCrash()
 
+	factory := informers.NewSharedInformerFactory(k8sClient, 0)
 	for _, src := range sourceFlag {
 		switch src {
 		case "ingress":
-			go sources.WatchIngresses(k8sClient, namespace, resources)
+			ingressController := source.NewIngressWatcher(factory, namespace, notifyMdns)
+			go ingressController.Run(stopper)
 		case "service":
-			go sources.WatchServices(k8sClient, namespace, resources, publishInternal)
+			serviceController := source.NewServicesWatcher(factory, namespace, notifyMdns, publishInternal)
+			go serviceController.Run(stopper)
 		}
 	}
 
-	log.Println("Waiting for resources to publish...")
 	for {
-		advertiseResource := <-resources
-
-		ip := net.ParseIP(advertiseResource.IP)
-		if ip == nil {
-			continue
-		}
-
-		// Construct reverse IP
-		reverseIP := net.IPv4(ip[15], ip[14], ip[13], ip[12])
-
-		records := []string{
-			fmt.Sprintf("%s.%s.local. %d IN A %s", advertiseResource.Name, advertiseResource.Namespace, recordTTL, ip),
-			fmt.Sprintf("%s.in-addr.arpa. %d IN PTR %s.%s.local.", reverseIP, recordTTL, advertiseResource.Name, advertiseResource.Namespace),
-		}
-
-		if advertiseResource.Namespace == defaultNamespace {
-			records = append(records, fmt.Sprintf("%s.local. %d IN A %s", advertiseResource.Name, recordTTL, ip))
-		}
-
-		switch advertiseResource.Action {
-		case watch.Added:
-			for _, record := range records {
-				log.Printf("Added %s\n", record)
-				mustPublish(record)
+		select {
+		case advertiseResource := <-notifyMdns:
+			for _, record := range constructRecords(advertiseResource) {
+				switch advertiseResource.Action {
+				case resource.Added:
+					log.Printf("Added %s\n", record)
+					publishRecord(record)
+				case resource.Deleted:
+					log.Printf("Remove %s\n", record)
+					unpublishRecord(record)
+				}
 			}
-		case watch.Deleted:
-			for _, record := range records {
-				log.Printf("Remove %s\n", record)
-				mustUnPublish(record)
-			}
+		case <-stopper:
+			fmt.Println("Stopping program")
 		}
 	}
 }

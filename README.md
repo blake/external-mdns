@@ -130,14 +130,17 @@ command for your operating system.
 
 ```console
 $ dns-sd -Q example.local a in
-192.0.2.10
+DATE: ---Sun 16 Aug 2020---
+22:50:37.797  ...STARTING...
+Timestamp     A/R    Flags if Name                          Type  Class   Rdata
+22:50:37.959  Add        2  4 example.local.                Addr   IN     192.0.2.10
 ```
 
 #### Linux
 
 ```console
 $ avahi-resolve-address -4 --name example.local
-192.0.2.10
+example.local 192.0.2.10
 ```
 
 [External DNS]: https://github.com/kubernetes-sigs/external-dns
