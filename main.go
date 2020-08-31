@@ -18,9 +18,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 
+	"github.com/blake/external-mdns/mdns"
 	"github.com/blake/external-mdns/resource"
 	"github.com/blake/external-mdns/source"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -75,6 +77,39 @@ func lookupEnvOrInt(key string, defaultVal int) int {
 		return v
 	}
 	return defaultVal
+}
+
+func constructRecords(r resource.Resource) []string {
+	var records []string
+
+	ip := net.ParseIP(r.IP)
+	if ip == nil {
+		return records
+	}
+
+	// Construct reverse IP
+	reverseIP := net.IPv4(ip[15], ip[14], ip[13], ip[12])
+
+	records = append(records, fmt.Sprintf("%s.%s.local. %d IN A %s", r.Name, r.Namespace, recordTTL, ip))
+	records = append(records, fmt.Sprintf("%s.in-addr.arpa. %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+
+	if r.Namespace == defaultNamespace {
+		records = append(records, fmt.Sprintf("%s.local. %d IN A %s", r.Name, recordTTL, ip))
+	}
+
+	return records
+}
+
+func publishRecord(rr string) {
+	if err := mdns.Publish(rr); err != nil {
+		log.Fatalf(`Unable to publish record "%s": %v`, rr, err)
+	}
+}
+
+func unpublishRecord(rr string) {
+	if err := mdns.UnPublish(rr); err != nil {
+		log.Fatalf(`Unable to publish record "%s": %v`, rr, err)
+	}
 }
 
 var (
