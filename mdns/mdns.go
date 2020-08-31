@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/miekg/dns"
+	"github.com/mitchellh/copystructure"
 )
 
 var (
@@ -50,6 +51,7 @@ func Publish(r string) error {
 	return nil
 }
 
+// UnPublish removes mDNS advertisement for the given record
 func UnPublish(r string) error {
 	rr, err := dns.NewRR(r)
 	if err != nil {
@@ -59,6 +61,7 @@ func UnPublish(r string) error {
 	return nil
 }
 
+// Clear removes all entries from advertisement
 func Clear() {
 	local.op <- operation{"clr", nil}
 }
@@ -95,7 +98,7 @@ type operation struct {
 type zone struct {
 	entries map[string]entries
 	op      chan operation
-	queries chan *query // query exsting entries in zone
+	queries chan *query // query existing entries in zone
 }
 
 func (z *zone) mainloop() {
@@ -112,9 +115,17 @@ func (z *zone) mainloop() {
 				entries := z.entries[entry.fqdn()]
 				idx := z.entries[entry.fqdn()].contains(entry)
 				if idx != -1 {
-					entries[idx] = entries[len(entries)-1]
-					entries[len(entries)-1] = nil
-					z.entries[entry.fqdn()] = entries[:len(entries)-1]
+					numEntries := len(entries)
+					if numEntries == 1 {
+						delete(z.entries, entry.fqdn())
+					} else {
+						// Copy last element to index idx
+						entries[idx] = entries[numEntries-1]
+						// Erase last element (write nil value).
+						entries[numEntries-1] = nil
+						// Truncate slice
+						z.entries[entry.fqdn()] = entries[:numEntries-1]
+					}
 				}
 			case "clr":
 				z.entries = make(map[string]entries)
@@ -134,7 +145,12 @@ func (z *zone) query(q dns.Question) (entries []*entry) {
 	res := make(chan *entry, 16)
 	z.queries <- &query{q, res}
 	for e := range res {
-		entries = append(entries, e)
+		dup, err := copystructure.Copy(e)
+		if err != nil {
+			return
+		}
+		response := dup.(*entry)
+		entries = append(entries, response)
 	}
 	return
 }
@@ -171,7 +187,6 @@ func openSocket(addr *net.UDPAddr) (*net.UDPConn, error) {
 	default:
 		return net.ListenMulticastUDP("udp4", nil, ipv4mcastaddr)
 	}
-	panic("unreachable")
 }
 
 type pkt struct {
@@ -222,7 +237,7 @@ func (c *connector) mainloop() {
 			msg.UDPAddr = addr
 
 			if err := c.writeMessage(msg.Msg, addr); err != nil {
-				log.Println("Cannot send: %s", err)
+				log.Println("Cannot send: ", err)
 			}
 		}
 	}
