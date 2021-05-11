@@ -18,7 +18,7 @@ LoadBalancer, will be advertised on the local network.
 
 By default External-mDNS will advertise hostnames for exposed resources in all
 namespaces. Use the `-namespace` flag to restrict advertisement to a single
-namespace.
+namespace, or `-without-namespace=true` for all namespaces.
 
 DNS records are advertised with the format `<hostname/service_name>.<namespace>.local`.
 In addition, hostnames for resources in the `-default-namespace` will also be

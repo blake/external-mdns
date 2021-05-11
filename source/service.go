@@ -37,7 +37,7 @@ type ServiceSource struct {
 func (s *ServiceSource) Run(stopCh chan struct{}) error {
 	s.sharedInformer.Run(stopCh)
 	if !cache.WaitForCacheSync(stopCh, s.sharedInformer.HasSynced) {
-		runtime.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
+		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 	}
 	return nil
 }
@@ -82,7 +82,8 @@ func (s *ServiceSource) onUpdate(oldObj interface{}, newObj interface{}) {
 func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Resource, error) {
 
 	var advertiseObj = resource.Resource{
-		Action: action,
+		SourceType: "service",
+		Action:     action,
 	}
 
 	service, ok := obj.(*corev1.Service)

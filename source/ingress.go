@@ -29,10 +29,9 @@ import (
 
 // IngressSource handles adding, updating, or removing mDNS record advertisements
 type IngressSource struct {
-	namespace       string
-	publishInternal bool
-	notifyChan      chan<- resource.Resource
-	sharedInformer  cache.SharedIndexInformer
+	namespace      string
+	notifyChan     chan<- resource.Resource
+	sharedInformer cache.SharedIndexInformer
 }
 
 // Run starts shared informers and waits for the shared informer cache to
@@ -40,7 +39,7 @@ type IngressSource struct {
 func (i *IngressSource) Run(stopCh chan struct{}) error {
 	i.sharedInformer.Run(stopCh)
 	if !cache.WaitForCacheSync(stopCh, i.sharedInformer.HasSynced) {
-		runtime.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
+		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 	}
 	return nil
 }
@@ -134,10 +133,11 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 			hostname = parsedHost.Domain
 		}
 		advertiseObj := resource.Resource{
-			Action:    action,
-			Name:      hostname,
-			Namespace: ingress.Namespace,
-			IP:        ipField,
+			SourceType: "ingress",
+			Action:     action,
+			Name:       hostname,
+			Namespace:  ingress.Namespace,
+			IP:         ipField,
 		}
 
 		records = append(records, advertiseObj)

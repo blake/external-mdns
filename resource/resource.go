@@ -22,8 +22,9 @@ const (
 
 // Resource represents a resource to advertise over mDNS
 type Resource struct {
-	Action    string
-	IP        string
-	Name      string
-	Namespace string
+	SourceType string
+	Action     string
+	IP         string
+	Name       string
+	Namespace  string
 }
