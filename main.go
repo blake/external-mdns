@@ -79,6 +79,17 @@ func lookupEnvOrInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
+func lookupEnvOrBool(key string, defaultVal bool) bool {
+	if val, ok := os.LookupEnv(key); ok {
+		v, err := strconv.ParseBool(val)
+		if err != nil {
+			log.Fatalf("lookupEnvOrBool[%s]: %v", key, err)
+		}
+		return v
+	}
+	return defaultVal
+}
+
 func constructRecords(r resource.Resource) []string {
 	var records []string
 
@@ -93,7 +104,7 @@ func constructRecords(r resource.Resource) []string {
 	records = append(records, fmt.Sprintf("%s.%s.local. %d IN A %s", r.Name, r.Namespace, recordTTL, ip))
 	records = append(records, fmt.Sprintf("%s.in-addr.arpa. %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
 
-	if r.Namespace == defaultNamespace {
+	if r.Namespace == defaultNamespace || withoutNamespace {
 		records = append(records, fmt.Sprintf("%s.local. %d IN A %s", r.Name, recordTTL, ip))
 	}
 
@@ -116,6 +127,7 @@ var (
 	master           = ""
 	namespace        = ""
 	defaultNamespace = "default"
+	withoutNamespace = false
 	test             = flag.Bool("test", false, "testing mode, no connection to k8s")
 	sourceFlag       k8sSource
 	kubeconfig       string
@@ -131,6 +143,7 @@ func main() {
 
 	// External-mDNS options
 	flag.StringVar(&defaultNamespace, "default-namespace", lookupEnvOrString("EXTERNAL_MDNS_DEFAULT_NAMESPACE", defaultNamespace), "Namespace in which services should also be published with a shorter entry")
+	flag.BoolVar(&withoutNamespace, "without-namespace", lookupEnvOrBool("EXTERNAL_MDNS_WITHOUT_NAMESPACE", withoutNamespace), "Published with a shorter entry without namespace (default: false)")
 	flag.StringVar(&namespace, "namespace", lookupEnvOrString("EXTERNAL_MDNS_NAMESPACE", namespace), "Limit sources of endpoints to a specific namespace (default: all namespaces)")
 	flag.Var(&sourceFlag, "source", "The resource types that are queried for endpoints; specify multiple times for multiple sources (required, options: service, ingress)")
 	flag.IntVar(&recordTTL, "record-ttl", lookupEnvOrInt("EXTERNAL_MDNS_RECORD_TTL", recordTTL), "DNS record time-to-live")
