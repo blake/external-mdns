@@ -68,7 +68,7 @@ kind: ServiceAccount
 metadata:
   name: external-mdns
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
  name: external-mdns
@@ -80,7 +80,7 @@ rules:
   resources: ["ingresses"]
   verbs: ["list", "watch"]
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
  name: external-mdns-viewer
