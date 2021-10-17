@@ -21,7 +21,7 @@ import (
 
 	"github.com/blake/external-mdns/resource"
 	"github.com/jpillora/go-tld"
-	"k8s.io/api/extensions/v1beta1"
+	v1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
@@ -95,7 +95,7 @@ func (i *IngressSource) onUpdate(oldObj interface{}, newObj interface{}) {
 func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource.Resource, error) {
 	var records []resource.Resource
 
-	ingress, ok := obj.(*v1beta1.Ingress)
+	ingress, ok := obj.(*v1.Ingress)
 	if !ok {
 		return records, nil
 	}
@@ -147,7 +147,7 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 
 // NewIngressWatcher creates an IngressSource
 func NewIngressWatcher(factory informers.SharedInformerFactory, namespace string, notifyChan chan<- resource.Resource) IngressSource {
-	ingressInformer := factory.Extensions().V1beta1().Ingresses().Informer()
+	ingressInformer := factory.Networking().V1().Ingresses().Informer()
 	i := &IngressSource{
 		namespace:      namespace,
 		notifyChan:     notifyChan,
