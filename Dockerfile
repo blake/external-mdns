@@ -1,4 +1,4 @@
-FROM golang:1.14
+FROM golang:1.16
 LABEL maintainer="Blake Covarrubias <blake@covarrubi.as>" \
       org.opencontainers.image.authors="Blake Covarrubias <blake@covarrubi.as>" \
       org.opencontainers.image.description="Advertises records for Kubernetes resources over multicast DNS." \
