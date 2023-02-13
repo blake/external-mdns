@@ -20,7 +20,8 @@ import (
 	"log"
 	"net"
 	"os"
-	"strconv"
+        "strconv"
+        "strings"
 
 	"github.com/blake/external-mdns/mdns"
 	"github.com/blake/external-mdns/resource"
@@ -90,6 +91,10 @@ func lookupEnvOrBool(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
+func IsIPv6(address string) bool {
+    return strings.Count(address, ":") >= 2
+}
+
 func constructRecords(r resource.Resource) []string {
 	var records []string
 
@@ -99,12 +104,17 @@ func constructRecords(r resource.Resource) []string {
 	}
 
 	// Construct reverse IP
-	reverseIP := net.IPv4(ip[15], ip[14], ip[13], ip[12])
+        reverseIP := net.IPv4(ip[15], ip[14], ip[13], ip[12])
+
 
 	// Publish A records resources as <name>.<namespace>.local
-	// Ensure corresponding PTR records map to this hostname
-	records = append(records, fmt.Sprintf("%s.%s.local. %d IN A %s", r.Name, r.Namespace, recordTTL, ip))
-	records = append(records, fmt.Sprintf("%s.in-addr.arpa. %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+        // Ensure corresponding PTR records map to this hostname
+	if IsIPv6(r.IP) {
+	    records = append(records, fmt.Sprintf("%s.%s.local. %d IN AAAA %s", r.Name, r.Namespace, recordTTL, ip))
+	} else {
+	    records = append(records, fmt.Sprintf("%s.%s.local. %d IN A %s", r.Name, r.Namespace, recordTTL, ip))
+	    records = append(records, fmt.Sprintf("%s.in-addr.arpa. %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+	}
 
 	// Publish services without the name in the namespace if any of the following
 	// criteria is satisfied:
