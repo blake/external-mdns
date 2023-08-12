@@ -49,7 +49,7 @@ func (s *ServiceSource) onAdd(obj interface{}) {
 		fmt.Printf("updating, %s", advertiseResource.Name)
 	}
 
-	if advertiseResource.IP == "" {
+	if len(advertiseResource.IPs) == 0 {
 		return
 	}
 
@@ -94,13 +94,14 @@ func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Re
 
 	advertiseObj.Name = service.Name
 	advertiseObj.Namespace = service.Namespace
+	advertiseObj.IPs = []string{}
 
 	if service.Spec.Type == "ClusterIP" && s.publishInternal {
-		advertiseObj.IP = service.Spec.ClusterIP
+		advertiseObj.IPs = append(advertiseObj.IPs, service.Spec.ClusterIP)
 	} else if service.Spec.Type == "LoadBalancer" {
 		for _, lb := range service.Status.LoadBalancer.Ingress {
 			if lb.IP != "" {
-				advertiseObj.IP = lb.IP
+				advertiseObj.IPs = append(advertiseObj.IPs, lb.IP)
 			}
 		}
 	}
