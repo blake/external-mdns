@@ -154,6 +154,11 @@ func constructRecords(r resource.Resource) []string {
 		records = append(records, fmt.Sprintf("%s.%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
 		records = append(records, fmt.Sprintf("%s %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
 
+		// Publish records resources as <name>-<namespace>.local
+		// Because Windows does not support subdomains resolution via mDNS and uses regular DNS query instead.
+		records = append(records, fmt.Sprintf("%s-%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
+		records = append(records, fmt.Sprintf("%s %d IN PTR %s-%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+
 		// Publish services without the name in the namespace if any of the following
 		// criteria is satisfied:
 		// 1. The Service exists in the default namespace
