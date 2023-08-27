@@ -287,7 +287,7 @@ func (c *connector) writeMessage(msg *dns.Msg, addr *net.UDPAddr) error {
 
 // consume an mdns packet from the wire and decode it
 func (c *connector) readMessage() (*dns.Msg, *net.UDPAddr, error) {
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16384)
 	read, addr, err := c.ReadFromUDP(buf)
 	if err != nil {
 		return nil, nil, err
