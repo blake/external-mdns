@@ -24,7 +24,7 @@ const (
 type Resource struct {
 	SourceType string
 	Action     string
-	IP         string
+	IPs        []string
 	Name       string
 	Namespace  string
 }

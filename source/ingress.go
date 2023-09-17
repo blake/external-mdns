@@ -100,14 +100,14 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 		return records, nil
 	}
 
-	var ipField string
+	var ipFields []string
 	for _, lb := range ingress.Status.LoadBalancer.Ingress {
 		if lb.IP != "" {
-			ipField = lb.IP
+			ipFields = append(ipFields, lb.IP)
 		}
 	}
 
-	if ipField == "" {
+	if len(ipFields) == 0 {
 		return records, nil
 	}
 
@@ -137,7 +137,7 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 			Action:     action,
 			Name:       hostname,
 			Namespace:  ingress.Namespace,
-			IP:         ipField,
+			IPs:        ipFields,
 		}
 
 		records = append(records, advertiseObj)

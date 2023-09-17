@@ -90,29 +90,87 @@ func lookupEnvOrBool(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
+/*
+The following functions were obtained from
+https://gist.github.com/trajber/7cb6abd66d39662526df
+
+  - hexDigit
+  - reverseAddress()
+*/
+const hexDigit = "0123456789abcdef"
+
+func reverseAddress(addr string) (arpa string, err error) {
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return "", &net.DNSError{Err: "unrecognized address", Name: addr}
+	}
+	if ip.To4() != nil {
+		return net.IPv4(ip[15], ip[14], ip[13], ip[12]).String() + ".in-addr.arpa.", nil
+	}
+	// Must be IPv6
+	buf := make([]byte, 0, len(ip)*4+len("ip6.arpa."))
+	// Add it, in reverse, to the buffer
+	for i := len(ip) - 1; i >= 0; i-- {
+		v := ip[i]
+		buf = append(buf, hexDigit[v&0xF])
+		buf = append(buf, '.')
+		buf = append(buf, hexDigit[v>>4])
+		buf = append(buf, '.')
+	}
+	// Append "ip6.arpa." and return (buf already has the final .)
+	buf = append(buf, "ip6.arpa."...)
+	return string(buf), nil
+}
+
 func constructRecords(r resource.Resource) []string {
 	var records []string
 
-	ip := net.ParseIP(r.IP)
-	if ip == nil {
-		return records
-	}
+	for _, resourceIP := range r.IPs {
+		ip := net.ParseIP(resourceIP)
+		if ip == nil {
+			continue
+		}
 
-	// Construct reverse IP
-	reverseIP := net.IPv4(ip[15], ip[14], ip[13], ip[12])
+		reverseIP, _ := reverseAddress(resourceIP)
 
-	// Publish A records resources as <name>.<namespace>.local
-	// Ensure corresponding PTR records map to this hostname
-	records = append(records, fmt.Sprintf("%s.%s.local. %d IN A %s", r.Name, r.Namespace, recordTTL, ip))
-	records = append(records, fmt.Sprintf("%s.in-addr.arpa. %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+		var recordType string
+		if ip.To4() != nil {
+			if exposeIPv4 == false {
+				continue
+			}
+			recordType = "A"
+		} else {
+			if exposeIPv6 == false {
+				continue
+			}
+			recordType = "AAAA"
+		}
 
-	// Publish services without the name in the namespace if any of the following
-	// criteria is satisfied:
-	// 1. The Service exists in the default namespace
-	// 2. The -without-namespace flag is equal to true
-	// 3. The record to be published is from an Ingress with a defined hostname
-	if r.Namespace == defaultNamespace || withoutNamespace || r.SourceType == "ingress" {
-		records = append(records, fmt.Sprintf("%s.local. %d IN A %s", r.Name, recordTTL, ip))
+		// Publish records resources as <name>.<namespace>.local
+		// Ensure corresponding PTR records map to this hostname
+		records = append(records, fmt.Sprintf("%s.%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
+		if reverseIP != "" {
+			records = append(records, fmt.Sprintf("%s %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+		}
+
+		// Publish records resources as <name>-<namespace>.local
+		// Because Windows does not support subdomains resolution via mDNS and uses regular DNS query instead.
+		records = append(records, fmt.Sprintf("%s-%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
+		if reverseIP != "" {
+			records = append(records, fmt.Sprintf("%s %d IN PTR %s-%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+		}
+
+		// Publish services without the name in the namespace if any of the following
+		// criteria is satisfied:
+		// 1. The Service exists in the default namespace
+		// 2. The -without-namespace flag is equal to true
+		// 3. The record to be published is from an Ingress with a defined hostname
+		if r.Namespace == defaultNamespace || withoutNamespace || r.SourceType == "ingress" {
+			records = append(records, fmt.Sprintf("%s.local. %d IN %s %s", r.Name, recordTTL, recordType, ip))
+			if reverseIP != "" {
+				records = append(records, fmt.Sprintf("%s %d IN PTR %s.local.", reverseIP, recordTTL, r.Name))
+			}
+		}
 	}
 
 	return records
@@ -138,6 +196,8 @@ var (
 	test             = flag.Bool("test", false, "testing mode, no connection to k8s")
 	sourceFlag       k8sSource
 	kubeconfig       string
+	exposeIPv4       = true
+	exposeIPv6       = false
 	publishInternal  = flag.Bool("publish-internal-services", false, "Publish DNS records for ClusterIP services (optional)")
 	recordTTL        = 120
 )
@@ -153,6 +213,8 @@ func main() {
 	flag.BoolVar(&withoutNamespace, "without-namespace", lookupEnvOrBool("EXTERNAL_MDNS_WITHOUT_NAMESPACE", withoutNamespace), "Published with a shorter entry without namespace (default: false)")
 	flag.StringVar(&namespace, "namespace", lookupEnvOrString("EXTERNAL_MDNS_NAMESPACE", namespace), "Limit sources of endpoints to a specific namespace (default: all namespaces)")
 	flag.Var(&sourceFlag, "source", "The resource types that are queried for endpoints; specify multiple times for multiple sources (required, options: service, ingress)")
+	flag.BoolVar(&exposeIPv4, "expose-ipv4", lookupEnvOrBool("EXTERNAL_MDNS_EXPOSE_IPV4", exposeIPv4), "Publish A DNS entry (default: true)")
+	flag.BoolVar(&exposeIPv6, "expose-ipv6", lookupEnvOrBool("EXTERNAL_MDNS_EXPOSE_IPV6", exposeIPv6), "Publish AAAA DNS entry (default: false)")
 	flag.IntVar(&recordTTL, "record-ttl", lookupEnvOrInt("EXTERNAL_MDNS_RECORD_TTL", recordTTL), "DNS record time-to-live")
 
 	flag.Parse()

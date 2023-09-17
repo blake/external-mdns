@@ -13,15 +13,10 @@ import (
 )
 
 var (
-	ipv4mcastaddr = &net.UDPAddr{
-		IP:   net.ParseIP("224.0.0.251"),
-		Port: 5353,
-	}
+	ipv4mcastaddr, _ = net.ResolveUDPAddr("udp", "224.0.0.251:5353")
 
-	ipv6mcastaddr = &net.UDPAddr{
-		IP:   net.ParseIP("ff02::fb"),
-		Port: 5353,
-	}
+	ipv6mcastaddr, _ = net.ResolveUDPAddr("udp6", "[ff02::fb]:5353")
+
 	local *zone // the local mdns zone
 )
 
@@ -35,10 +30,9 @@ func init() {
 	if err := local.listen(ipv4mcastaddr); err != nil {
 		log.Fatalf("Failed to listen %s: %s", ipv4mcastaddr, err)
 	}
-	// TODO re-enable IPV6 with better error handling
-	//if err := local.listen(ipv6mcastaddr); err != nil {
-	//	log.Printf("Failed to listen %s: %s", ipv6mcastaddr, err)
-	//}
+	if err := local.listen(ipv6mcastaddr); err != nil {
+		log.Printf("Failed to listen %s: %s", ipv6mcastaddr, err)
+	}
 }
 
 // Publish adds a record, describewrite tod in RFC XXX
@@ -183,9 +177,9 @@ func (z *zone) listen(addr *net.UDPAddr) error {
 func openSocket(addr *net.UDPAddr) (*net.UDPConn, error) {
 	switch addr.IP.To4() {
 	case nil:
-		return net.ListenMulticastUDP("udp6", nil, ipv6mcastaddr)
+		return net.ListenMulticastUDP("udp6", nil, addr)
 	default:
-		return net.ListenMulticastUDP("udp4", nil, ipv4mcastaddr)
+		return net.ListenMulticastUDP("udp4", nil, addr)
 	}
 }
 
@@ -224,7 +218,7 @@ func (c *connector) mainloop() {
 		msg.Extra = append(msg.Extra, c.findExtra(msg.Answer...)...)
 
 		if len(msg.Answer) > 0 {
-			addr := ipv4mcastaddr
+			addr := c.UDPAddr
 			// check unicast-response bit https://tools.ietf.org/html/rfc6762#section-5.4
 			//if msg.Question[0].Qclass & 32768 > 0 {
 			//	log.Println("using unicast")
@@ -293,7 +287,7 @@ func (c *connector) writeMessage(msg *dns.Msg, addr *net.UDPAddr) error {
 
 // consume an mdns packet from the wire and decode it
 func (c *connector) readMessage() (*dns.Msg, *net.UDPAddr, error) {
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16384)
 	read, addr, err := c.ReadFromUDP(buf)
 	if err != nil {
 		return nil, nil, err
