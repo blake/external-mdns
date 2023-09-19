@@ -207,28 +207,48 @@ func (c *connector) mainloop() {
 	go c.readloop(in)
 	for {
 		msg := <-in
-		msg.MsgHdr.Response = true // convert question to response
-		msg.MsgHdr.Authoritative = true
+		msg.MsgHdr.Response = true      // convert question to response
+		msg.MsgHdr.Authoritative = true // answer should be authoritative otherwise it may be discarded
+
+		// https://datatracker.ietf.org/doc/html/rfc6762#section-6.7
+		// if source port is not 5353 then it's "One-Shot Multicast DNS Query" and we should send unicast response
+		isLegacyUnicast := msg.UDPAddr.Port != 5353
+
 		msg.Answer = make([]dns.RR, 0) // some queries already have an answer, we should not answer them
 		for _, result := range c.query(msg.Question) {
-			// Set Cache-Flush bit
-			result.RR.Header().Class = result.RR.Header().Class | 0x8000
+			if isLegacyUnicast == true {
+				// https://datatracker.ietf.org/doc/html/rfc6762#section-6.7
+				// The resource record TTL given in a legacy unicast response SHOULD NOT be greater than ten seconds
+				result.RR.Header().Ttl = 10
+			} else {
+				// Set Cache-Flush bit
+				result.RR.Header().Class = result.RR.Header().Class | 0x8000
+			}
 			msg.Answer = append(msg.Answer, result.RR)
 		}
 		msg.Extra = append(msg.Extra, c.findExtra(msg.Answer...)...)
 
 		if len(msg.Answer) > 0 {
-			addr := c.UDPAddr
-			// check unicast-response bit https://tools.ietf.org/html/rfc6762#section-5.4
-			//if msg.Question[0].Qclass & 32768 > 0 {
-			//	log.Println("using unicast")
-			//	addr = msg.UDPAddr
-			//}
+			var addr *net.UDPAddr
+			// https://tools.ietf.org/html/rfc6762#section-5.4
+			// Check if unicast-response bit set
+			isQueryUnicast := msg.Question[0].Qclass&32768 > 0
+
+			if isLegacyUnicast || isQueryUnicast {
+				addr = msg.UDPAddr
+			} else {
+				// https://datatracker.ietf.org/doc/html/rfc6762#section-11
+				// A host sending Multicast DNS queries to a link-local destination
+				// address MUST only accept responses to that query that originate
+				// from the local link, and silently discard any other response packets.
+				addr = c.UDPAddr
+			}
+			msg.UDPAddr = addr
 
 			// nuke questions
-			msg.Question = nil
-
-			msg.UDPAddr = addr
+			if isLegacyUnicast == false {
+				msg.Question = nil
+			}
 
 			if err := c.writeMessage(msg.Msg, addr); err != nil {
 				log.Println("Cannot send: ", err)
