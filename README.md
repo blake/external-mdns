@@ -139,8 +139,38 @@ Timestamp     A/R    Flags if Name                          Type  Class   Rdata
 #### Linux
 
 ```console
+$ getent hosts example.local
+192.0.2.10      example.local
+```
+
+Or, resolve the hostname using Avahi.
+
+```console
 $ avahi-resolve-address -4 --name example.local
 example.local 192.0.2.10
+```
+
+Note about Linux DNS lookups:
+
+If `/etc/nsswitch.conf` is configured to use the `mdns4_minimal` module,
+`libnss-mdns` will reject the request if the request has more than two labels.
+Example: example.default.local is rejected.
+
+In order to resolve hostnames that are published from non-default Kubernetes
+namespaces, modify `/etc/nsswitch.conf` and replace `mdns4_minimal` with `mdns4`.
+Also, create the file `/etc/mdns.allow` and insert the following contents.
+
+```text
+# /etc/mdns.allow
+.local.
+.local
+```
+
+Hostnames with more than two labels should now be resolvable.
+
+```console
+$ getent hosts example.default.local
+192.0.2.10      example.default.local
 ```
 
 [External DNS]: https://github.com/kubernetes-sigs/external-dns
