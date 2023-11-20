@@ -1,4 +1,4 @@
-FROM golang:1.16
+FROM --platform=$BUILDPLATFORM golang:1.16
 LABEL maintainer="Blake Covarrubias <blake@covarrubi.as>" \
       org.opencontainers.image.authors="Blake Covarrubias <blake@covarrubi.as>" \
       org.opencontainers.image.description="Advertises records for Kubernetes resources over multicast DNS." \
@@ -9,11 +9,12 @@ LABEL maintainer="Blake Covarrubias <blake@covarrubi.as>" \
 
 ARG TARGETOS
 ARG TARGETARCH
+ARG TARGETVARIANT
 
 ADD . /go/src/github.com/blake/external-mdns
 WORKDIR /go/src/github.com/blake/external-mdns
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=$(echo ${TARGETVARIANT} | cut -c2) \
     go build \
     -ldflags="-s -w" \
     -o external-mdns .
