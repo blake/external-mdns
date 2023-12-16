@@ -92,8 +92,14 @@ func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Re
 		return advertiseObj, nil
 	}
 
-	advertiseObj.Name = service.Name
 	advertiseObj.Namespace = service.Namespace
+	
+	if hostname, ok := service.Annotations["external-mdns.blakecovarrubias.com/hostname"]; ok {
+		advertiseObj.Name = hostname
+	} else {
+		advertiseObj.Name = service.Name
+	}
+
 	advertiseObj.IPs = []string{}
 
 	if service.Spec.Type == "ClusterIP" && s.publishInternal {
