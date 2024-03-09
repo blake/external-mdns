@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.16
+FROM --platform=$BUILDPLATFORM golang:1.16 as build
 LABEL maintainer="Blake Covarrubias <blake@covarrubi.as>" \
       org.opencontainers.image.authors="Blake Covarrubias <blake@covarrubi.as>" \
       org.opencontainers.image.description="Advertises records for Kubernetes resources over multicast DNS." \
@@ -14,11 +14,15 @@ ARG TARGETVARIANT
 ADD . /go/src/github.com/blake/external-mdns
 WORKDIR /go/src/github.com/blake/external-mdns
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=$(echo ${TARGETVARIANT} | cut -c2) \
+RUN mkdir -p /release/etc &&\
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOARM=$(echo ${TARGETVARIANT} | cut -c2) \
     go build \
     -ldflags="-s -w" \
-    -o external-mdns .
+    -o /etc/release/external-mdns . &&\
+    echo nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin > /release/etc/passwd
+
 
 FROM scratch
-COPY --from=0 /go/src/github.com/blake/external-mdns/external-mdns /external-mdns
+COPY --from=build /go/src/github.com/blake/external-mdns/external-mdns /external-mdns
+USER nobody
 ENTRYPOINT ["/external-mdns"]
