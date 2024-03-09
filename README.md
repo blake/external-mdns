@@ -24,6 +24,45 @@ DNS records are advertised with the format `<hostname/service_name>.<namespace>.
 In addition, hostnames for resources in the `-default-namespace` will also be
 advertised with a short name of `<hostname/service_name>.local`.
 
+### Additional control for Services
+
+Service discovery is automatic, however, there are some scenarios where one may wish
+to directly control names used with a more general service i.e. the service might be
+in front of an Ingress Controller but the service you wish to use is not defined with
+an Ingress resource such as in the case of non http/https service with nginx.
+
+Other scenarios include non Ingress types that publish a variety of services and act as
+an ingress but have configurations far more complex than can be expressed by an Ingress
+resource e.g. Istio.
+
+Additionally, one may wish to control in finer detail which services appear directly on
+.local MDNS advertisements without either moving services to the default namespace or
+enabling the global without-default flag.
+
+In this case Service annotations are possible as follows - these annotations have no effect
+if applied to an Ingress resource.
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: myservice
+  namespace: foospace
+  annotations:
+    external-mdns.blakecovarrubias.com/hostnames: foo
+    external-mdns.blakecovarrubias.com/without-namepace: "true"
+...
+spec:
+  type: LoadBalancer
+...
+```
+This example publishes an the service using the name foo which will result in the names
+foo.foospace.local foo-foospace.local and, because we have specified the addditional
+annotation foo.local is also published (unneccessary if using the global option).
+
+We urge you to test with the default behaviours for Services and Ingress before using these
+annotations as the automatic nature of external-mdns is good enough for most use cases.
+
+
 ## Deploying External-mDNS
 
 External-mDNS is configured using argument flags. Most flags can be replaced
