@@ -149,6 +149,7 @@ func constructRecords(r resource.Resource) []string {
 		// Publish records resources as <name>.<namespace>.local and as <name>-<namespace>.local
 		// Because Windows does not support subdomains resolution via mDNS and uses regular DNS query instead.
 		// Ensure corresponding PTR records map to this hostname
+		// To maintain backwards compatibility, without-namespace annontation still generates these records
 		for _, name := range r.Names {
 			records = append(records, fmt.Sprintf("%s.%s.local. %d IN %s %s", name, r.Namespace, recordTTL, recordType, ip))
 			records = append(records, fmt.Sprintf("%s-%s.local. %d IN %s %s", name, r.Namespace, recordTTL, recordType, ip))
@@ -161,9 +162,10 @@ func constructRecords(r resource.Resource) []string {
 		// Publish services without the name in the namespace if any of the following
 		// criteria is satisfied:
 		// 1. The Service exists in the default namespace
-		// 2. The -without-namespace flag is equal to true
-		// 3. The record to be published is from an Ingress with a defined hostname
-		if r.Namespace == defaultNamespace || withoutNamespace || r.SourceType == "ingress" {
+		// 2. Service names exposed with annotation and with additional without-namespace annotation set to true
+		// 3. The -without-namespace flag is equal to true
+		// 4. The record to be published is from an Ingress with a defined hostname
+		if r.Namespace == defaultNamespace || r.WithoutNamespace || withoutNamespace || r.SourceType == "ingress" {
 			for _, name := range r.Names {
 				records = append(records, fmt.Sprintf("%s.local. %d IN %s %s", name, recordTTL, recordType, ip))
 				if reverseIP != "" {
