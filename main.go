@@ -135,29 +135,27 @@ func constructRecords(r resource.Resource) []string {
 
 		var recordType string
 		if ip.To4() != nil {
-			if exposeIPv4 == false {
+			if !exposeIPv4 {
 				continue
 			}
 			recordType = "A"
 		} else {
-			if exposeIPv6 == false {
+			if !exposeIPv6 {
 				continue
 			}
 			recordType = "AAAA"
 		}
 
-		// Publish records resources as <name>.<namespace>.local
-		// Ensure corresponding PTR records map to this hostname
-		records = append(records, fmt.Sprintf("%s.%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
-		if reverseIP != "" {
-			records = append(records, fmt.Sprintf("%s %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
-		}
-
-		// Publish records resources as <name>-<namespace>.local
+		// Publish records resources as <name>.<namespace>.local and as <name>-<namespace>.local
 		// Because Windows does not support subdomains resolution via mDNS and uses regular DNS query instead.
-		records = append(records, fmt.Sprintf("%s-%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
-		if reverseIP != "" {
-			records = append(records, fmt.Sprintf("%s %d IN PTR %s-%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+		// Ensure corresponding PTR records map to this hostname
+		for _, name := range r.Names {
+			records = append(records, fmt.Sprintf("%s.%s.local. %d IN %s %s", name, r.Namespace, recordTTL, recordType, ip))
+			records = append(records, fmt.Sprintf("%s-%s.local. %d IN %s %s", name, r.Namespace, recordTTL, recordType, ip))
+			if reverseIP != "" {
+				records = append(records, fmt.Sprintf("%s %d IN PTR %s.%s.local.", reverseIP, recordTTL, name, r.Namespace))
+				records = append(records, fmt.Sprintf("%s %d IN PTR %s-%s.local.", reverseIP, recordTTL, name, r.Namespace))
+			}
 		}
 
 		// Publish services without the name in the namespace if any of the following
@@ -166,9 +164,11 @@ func constructRecords(r resource.Resource) []string {
 		// 2. The -without-namespace flag is equal to true
 		// 3. The record to be published is from an Ingress with a defined hostname
 		if r.Namespace == defaultNamespace || withoutNamespace || r.SourceType == "ingress" {
-			records = append(records, fmt.Sprintf("%s.local. %d IN %s %s", r.Name, recordTTL, recordType, ip))
-			if reverseIP != "" {
-				records = append(records, fmt.Sprintf("%s %d IN PTR %s.local.", reverseIP, recordTTL, r.Name))
+			for _, name := range r.Names {
+				records = append(records, fmt.Sprintf("%s.local. %d IN %s %s", name, recordTTL, recordType, ip))
+				if reverseIP != "" {
+					records = append(records, fmt.Sprintf("%s %d IN PTR %s.local.", reverseIP, recordTTL, name))
+				}
 			}
 		}
 	}

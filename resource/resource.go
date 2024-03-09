@@ -25,6 +25,6 @@ type Resource struct {
 	SourceType string
 	Action     string
 	IPs        []string
-	Name       string
+	Names      []string
 	Namespace  string
 }

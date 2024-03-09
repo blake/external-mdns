@@ -46,7 +46,9 @@ func (s *ServiceSource) onAdd(obj interface{}) {
 	advertiseResource, err := s.buildRecord(obj, resource.Added)
 
 	if err != nil {
-		fmt.Printf("updating, %s", advertiseResource.Name)
+		for _, name := range advertiseResource.Names {
+			fmt.Printf("updating, %s", name)
+		}
 	}
 
 	if len(advertiseResource.IPs) == 0 {
@@ -60,7 +62,9 @@ func (s *ServiceSource) onDelete(obj interface{}) {
 	advertiseResource, err := s.buildRecord(obj, resource.Deleted)
 
 	if err != nil {
-		fmt.Printf("Error deleting, %s", advertiseResource.Name)
+		for _, name := range advertiseResource.Names {
+			fmt.Printf("Error deleting, %s", name)
+		}
 	}
 	s.notifyChan <- advertiseResource
 }
@@ -92,7 +96,7 @@ func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Re
 		return advertiseObj, nil
 	}
 
-	advertiseObj.Name = service.Name
+	advertiseObj.Names = []string{service.Name}
 	advertiseObj.Namespace = service.Namespace
 	advertiseObj.IPs = []string{}
 
