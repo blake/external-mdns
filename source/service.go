@@ -106,6 +106,9 @@ func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Re
 	} else {
 		advertiseObj.Names = []string{service.Name}
 	}
+	if withoutNS, ok := service.Annotations["external-mdns.blakecovarrubias.com/without-namespace"]; ok {
+		advertiseObj.WithoutNamespace = strings.EqualFold(withoutNS, "true")
+	}
 
 	advertiseObj.Namespace = service.Namespace
 	advertiseObj.IPs = []string{}
