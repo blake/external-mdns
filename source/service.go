@@ -16,6 +16,7 @@ package source
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/blake/external-mdns/resource"
 	corev1 "k8s.io/api/core/v1"
@@ -96,7 +97,16 @@ func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Re
 		return advertiseObj, nil
 	}
 
-	advertiseObj.Names = []string{service.Name}
+	if hostnames, ok := service.Annotations["external-mdns.blakecovarrubias.com/hostnames"]; ok {
+		names := strings.Split(hostnames, ",")
+		for i := range names {
+			names[i] = strings.TrimSpace(names[i])
+		}
+		advertiseObj.Names = names
+	} else {
+		advertiseObj.Names = []string{service.Name}
+	}
+
 	advertiseObj.Namespace = service.Namespace
 	advertiseObj.IPs = []string{}
 
