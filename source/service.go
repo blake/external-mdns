@@ -16,6 +16,7 @@ package source
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/blake/external-mdns/resource"
 	corev1 "k8s.io/api/core/v1"
@@ -46,7 +47,9 @@ func (s *ServiceSource) onAdd(obj interface{}) {
 	advertiseResource, err := s.buildRecord(obj, resource.Added)
 
 	if err != nil {
-		fmt.Printf("updating, %s", advertiseResource.Name)
+		for _, name := range advertiseResource.Names {
+			fmt.Printf("updating, %s", name)
+		}
 	}
 
 	if len(advertiseResource.IPs) == 0 {
@@ -60,7 +63,9 @@ func (s *ServiceSource) onDelete(obj interface{}) {
 	advertiseResource, err := s.buildRecord(obj, resource.Deleted)
 
 	if err != nil {
-		fmt.Printf("Error deleting, %s", advertiseResource.Name)
+		for _, name := range advertiseResource.Names {
+			fmt.Printf("Error deleting, %s", name)
+		}
 	}
 	s.notifyChan <- advertiseResource
 }
@@ -92,7 +97,19 @@ func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Re
 		return advertiseObj, nil
 	}
 
-	advertiseObj.Name = service.Name
+	if hostnames, ok := service.Annotations["external-mdns.blakecovarrubias.com/hostnames"]; ok {
+		names := strings.Split(hostnames, ",")
+		for i := range names {
+			names[i] = strings.TrimSpace(names[i])
+		}
+		advertiseObj.Names = names
+	} else {
+		advertiseObj.Names = []string{service.Name}
+	}
+	if full, ok := service.Annotations["external-mdns.blakecovarrubias.com/without-default"]; ok {
+		advertiseObj.WithoutDefault = strings.EqualFold(full, "true")
+	}
+
 	advertiseObj.Namespace = service.Namespace
 	advertiseObj.IPs = []string{}
 

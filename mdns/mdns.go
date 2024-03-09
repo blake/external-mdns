@@ -193,7 +193,7 @@ func (c *connector) readloop(in chan pkt) {
 		msg, addr, err := c.readMessage()
 		if err != nil {
 			// log dud packets
-			log.Printf("Could not read from %s: %s", c.UDPConn, err)
+			log.Printf("Could not read from %#v: %s", c.UDPConn, err)
 			continue
 		}
 		if len(msg.Question) > 0 {
@@ -216,7 +216,7 @@ func (c *connector) mainloop() {
 
 		msg.Answer = make([]dns.RR, 0) // some queries already have an answer, we should not answer them
 		for _, result := range c.query(msg.Question) {
-			if isLegacyUnicast == true {
+			if isLegacyUnicast {
 				// https://datatracker.ietf.org/doc/html/rfc6762#section-6.7
 				// The resource record TTL given in a legacy unicast response SHOULD NOT be greater than ten seconds
 				result.RR.Header().Ttl = 10
@@ -246,7 +246,7 @@ func (c *connector) mainloop() {
 			msg.UDPAddr = addr
 
 			// nuke questions
-			if isLegacyUnicast == false {
+			if !isLegacyUnicast {
 				msg.Question = nil
 			}
 
