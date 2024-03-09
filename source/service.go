@@ -106,6 +106,9 @@ func (s *ServiceSource) buildRecord(obj interface{}, action string) (resource.Re
 	} else {
 		advertiseObj.Names = []string{service.Name}
 	}
+	if full, ok := service.Annotations["external-mdns.blakecovarrubias.com/without-default"]; ok {
+		advertiseObj.WithoutDefault = strings.EqualFold(full, "true")
+	}
 
 	advertiseObj.Namespace = service.Namespace
 	advertiseObj.IPs = []string{}

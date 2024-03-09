@@ -22,9 +22,10 @@ const (
 
 // Resource represents a resource to advertise over mDNS
 type Resource struct {
-	SourceType string
-	Action     string
-	IPs        []string
-	Names      []string
-	Namespace  string
+	SourceType     string
+	Action         string
+	IPs            []string
+	Names          []string
+	Namespace      string
+	WithoutDefault bool // For service annotation override, not global flag
 }
