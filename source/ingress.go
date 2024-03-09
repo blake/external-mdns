@@ -135,7 +135,7 @@ func (i *IngressSource) buildRecords(obj interface{}, action string) ([]resource
 		advertiseObj := resource.Resource{
 			SourceType: "ingress",
 			Action:     action,
-			Name:       hostname,
+			Names:      []string{hostname},
 			Namespace:  ingress.Namespace,
 			IPs:        ipFields,
 		}
