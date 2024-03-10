@@ -50,9 +50,19 @@ spec:
       labels:
         app: external-mdns
     spec:
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
       hostNetwork: true
+      serviceAccountName: external-mdns
       containers:
       - name: external-mdns
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         image: blakec/external-mdns:latest
         args:
         - -source=ingress
@@ -108,10 +118,19 @@ spec:
       labels:
         app: external-mdns
     spec:
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
       hostNetwork: true
       serviceAccountName: external-mdns
       containers:
       - name: external-mdns
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         image: blakec/external-mdns:latest
         args:
         - -source=ingress
