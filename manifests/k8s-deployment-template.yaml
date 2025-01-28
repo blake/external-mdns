@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-mdns
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: external-mdns
+  template:
+    metadata:
+      labels:
+        app: external-mdns
+    spec:
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+      hostNetwork: true
+      serviceAccountName: external-mdns # Assicurati che questo service account esista
+      containers:
+      - name: external-mdns
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        image: external-mdns # Skaffold sostituirà questo con l'immagine buildata
+        args:
+        - -source=ingress
+        - -source=service
+        - -truncate-long-records=true # Abilita il troncamento dei record
+        - -publish-internal-services=true
+        env:
+          - name: EXTERNAL_MDNS_NAMESPACE
+            value: "" # Modifica se vuoi limitare a un namespace specifico, lascialo vuoto per tutti i namespace
+          - name: EXTERNAL_MDNS_DEFAULT_NAMESPACE
+            value: "default" # Modifica se necessario
+          - name: EXTERNAL_MDNS_KUBECONFIG
+            value: "" # Generalmente non necessario in Minikube

@@ -122,6 +122,21 @@ func reverseAddress(addr string) (arpa string, err error) {
 	return string(buf), nil
 }
 
+var (
+	master           		= ""
+	namespace        		= ""
+	defaultNamespace 		= "default"
+	withoutNamespace 		= false
+	test             		= flag.Bool("test", false, "testing mode, no connection to k8s")
+	sourceFlag       		k8sSource
+	kubeconfig       		string
+	exposeIPv4       		= true
+	exposeIPv6       		= false
+	publishInternal  		= flag.Bool("publish-internal-services", false, "Publish DNS records for ClusterIP services (optional)")
+	recordTTL        		= 120
+	truncateLongRecords 		bool
+)
+
 func constructRecords(r resource.Resource) []string {
 	var records []string
 
@@ -135,12 +150,12 @@ func constructRecords(r resource.Resource) []string {
 
 		var recordType string
 		if ip.To4() != nil {
-			if exposeIPv4 == false {
+			if !exposeIPv4 {
 				continue
 			}
 			recordType = "A"
 		} else {
-			if exposeIPv6 == false {
+			if !exposeIPv6 {
 				continue
 			}
 			recordType = "AAAA"
@@ -148,16 +163,18 @@ func constructRecords(r resource.Resource) []string {
 
 		// Publish records resources as <name>.<namespace>.local
 		// Ensure corresponding PTR records map to this hostname
-		records = append(records, fmt.Sprintf("%s.%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
+		records = append(records, validatedRecord(r.Name, r.Namespace, recordTTL, recordType, ip, truncateLongRecords))
+
 		if reverseIP != "" {
-			records = append(records, fmt.Sprintf("%s %d IN PTR %s.%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+			records = append(records, validatedPTRRecord(reverseIP, recordTTL, r.Name, r.Namespace, truncateLongRecords))
 		}
 
 		// Publish records resources as <name>-<namespace>.local
 		// Because Windows does not support subdomains resolution via mDNS and uses regular DNS query instead.
-		records = append(records, fmt.Sprintf("%s-%s.local. %d IN %s %s", r.Name, r.Namespace, recordTTL, recordType, ip))
+		records = append(records, validatedRecord(fmt.Sprintf("%s-%s", r.Name, r.Namespace), "", recordTTL, recordType, ip, truncateLongRecords))
+
 		if reverseIP != "" {
-			records = append(records, fmt.Sprintf("%s %d IN PTR %s-%s.local.", reverseIP, recordTTL, r.Name, r.Namespace))
+			records = append(records, validatedPTRRecord(reverseIP, recordTTL, fmt.Sprintf("%s-%s", r.Name, r.Namespace), "", truncateLongRecords))
 		}
 
 		// Publish services without the name in the namespace if any of the following
@@ -166,9 +183,10 @@ func constructRecords(r resource.Resource) []string {
 		// 2. The -without-namespace flag is equal to true
 		// 3. The record to be published is from an Ingress with a defined hostname
 		if r.Namespace == defaultNamespace || withoutNamespace || r.SourceType == "ingress" {
-			records = append(records, fmt.Sprintf("%s.local. %d IN %s %s", r.Name, recordTTL, recordType, ip))
+			records = append(records, validatedRecord(r.Name, "", recordTTL, recordType, ip, truncateLongRecords))
+
 			if reverseIP != "" {
-				records = append(records, fmt.Sprintf("%s %d IN PTR %s.local.", reverseIP, recordTTL, r.Name))
+				records = append(records, validatedPTRRecord(reverseIP, recordTTL, r.Name, "", truncateLongRecords))
 			}
 		}
 	}
@@ -178,29 +196,15 @@ func constructRecords(r resource.Resource) []string {
 
 func publishRecord(rr string) {
 	if err := mdns.Publish(rr); err != nil {
-		log.Fatalf(`Unable to publish record "%s": %v`, rr, err)
+		log.Fatalf(`🔥 Failed to publish record "%s": %v`, rr, err)
 	}
 }
 
 func unpublishRecord(rr string) {
 	if err := mdns.UnPublish(rr); err != nil {
-		log.Fatalf(`Unable to publish record "%s": %v`, rr, err)
+		log.Fatalf(`🔥 Failed to unpublish record "%s": %v`, rr, err)
 	}
 }
-
-var (
-	master           = ""
-	namespace        = ""
-	defaultNamespace = "default"
-	withoutNamespace = false
-	test             = flag.Bool("test", false, "testing mode, no connection to k8s")
-	sourceFlag       k8sSource
-	kubeconfig       string
-	exposeIPv4       = true
-	exposeIPv6       = false
-	publishInternal  = flag.Bool("publish-internal-services", false, "Publish DNS records for ClusterIP services (optional)")
-	recordTTL        = 120
-)
 
 func main() {
 
@@ -216,6 +220,7 @@ func main() {
 	flag.BoolVar(&exposeIPv4, "expose-ipv4", lookupEnvOrBool("EXTERNAL_MDNS_EXPOSE_IPV4", exposeIPv4), "Publish A DNS entry (default: true)")
 	flag.BoolVar(&exposeIPv6, "expose-ipv6", lookupEnvOrBool("EXTERNAL_MDNS_EXPOSE_IPV6", exposeIPv6), "Publish AAAA DNS entry (default: false)")
 	flag.IntVar(&recordTTL, "record-ttl", lookupEnvOrInt("EXTERNAL_MDNS_RECORD_TTL", recordTTL), "DNS record time-to-live")
+	flag.BoolVar(&truncateLongRecords, "truncate-long-records", lookupEnvOrBool("EXTERNAL_MDNS_TRUNCATE_LONG_RECORDS", false), "Truncate long record names using SHA-256 hash (default: false)")
 
 	flag.Parse()
 
@@ -228,16 +233,16 @@ func main() {
 
 	// No sources provided.
 	if len(sourceFlag) == 0 {
-		fmt.Println("Specify at least once source to sync records from.")
+		log.Println("❌ Error: No sources specified. Please specify at least one source to sync records from")
 		os.Exit(1)
 	}
 
 	// Print parsed configuration
-	log.Printf("app.config %v\n", getConfig(flag.CommandLine))
+	log.Printf("🚀 Starting external-mdns with configuration:\n%v\n", getConfig(flag.CommandLine))
 
 	k8sClient, err := newK8sClient()
 	if err != nil {
-		log.Fatalln("Failed to create Kubernetes client:", err)
+		log.Fatalf("🔥 Failed to create Kubernetes client: %v", err)
 	}
 
 	notifyMdns := make(chan resource.Resource)
@@ -261,17 +266,20 @@ func main() {
 		select {
 		case advertiseResource := <-notifyMdns:
 			for _, record := range constructRecords(advertiseResource) {
+				if record == "" {
+					continue
+				}
 				switch advertiseResource.Action {
 				case resource.Added:
-					log.Printf("Added %s\n", record)
+					log.Printf("➕ Publishing new DNS record: %s\n", record)
 					publishRecord(record)
 				case resource.Deleted:
-					log.Printf("Remove %s\n", record)
+					log.Printf("➖ Removing DNS record: %s\n", record)
 					unpublishRecord(record)
 				}
 			}
 		case <-stopper:
-			fmt.Println("Stopping program")
+			log.Println("🛑 Stopping external-mdns")
 		}
 	}
 }
