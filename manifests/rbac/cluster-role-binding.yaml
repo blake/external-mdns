@@ -1,7 +1,8 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: external-mdns-viewer
+ name: external-mdns-viewer
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -9,4 +10,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: external-mdns
-  namespace: default # Assicurati che il namespace sia corretto
+  namespace: default

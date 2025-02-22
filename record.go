@@ -9,23 +9,23 @@ import (
 )
 
 func validatedFullName(name, namespace string, recordType string, truncate bool) string {
-	// Determiniamo il tipo di record per il log
+	// Determine the record type for logging
 	recordKind := recordType
 	if recordType == "" {
 		recordKind = "PTR"
 	}
 
-	// Verifica la lunghezza di ogni componente del nome
+	// Verify the length of each component of the name
 	components := []string{name}
 	if namespace != "" {
 		components = append(components, namespace)
 	}
 
-	// Verifica ogni componente
+	// Verify each component
 	for _, component := range components {
 		if len(component) > 63 {
 			if truncate {
-				// Se il componente è troppo lungo, lo tronchiamo
+				// If the component is too long, truncate it
 				hasher := sha256.New()
 				hasher.Write([]byte(component))
 				hash := hex.EncodeToString(hasher.Sum(nil))
@@ -35,7 +35,7 @@ func validatedFullName(name, namespace string, recordType string, truncate bool)
 					"                      └─ Truncated to: '%s'\n",
 					component, recordKind, truncatedComponent)
 
-				// Sostituisci il componente originale con quello troncato
+				// Replace the original component with the truncated one
 				if component == name {
 					name = truncatedComponent
 				} else {
@@ -50,7 +50,7 @@ func validatedFullName(name, namespace string, recordType string, truncate bool)
 		}
 	}
 
-	// Costruisci il nome completo
+	// Build the full name
 	if namespace != "" {
 		return fmt.Sprintf("%s.%s", name, namespace)
 	}
@@ -66,7 +66,7 @@ func validatedRecord(name, namespace string, ttl int, recordType string, ip net.
 }
 
 func validatedPTRRecord(reverseIP string, ttl int, name, namespace string, truncate bool) string {
-	// Passiamo una stringa vuota come recordType, verrà interpretata come PTR
+	// We pass an empty string as recordType, it will be interpreted as PTR
 	fullname := validatedFullName(name, namespace, "", truncate)
 	if fullname == "" {
 		return ""
