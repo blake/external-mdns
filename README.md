@@ -31,121 +31,42 @@ with environment variables. For instance, `--record-ttl` could be replaced with
 `EXTERNAL_MDNS_RECORD_TTL=60`, or `--namespace kube-system` could be replaced
 with `EXTERNAL_MDNS_NAMESPACE=kube-system`.
 
-### Manifest (without RBAC)
+Deployment manifests are located in the [manifests/](manifests/) directory.
 
-```yaml
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: external-mdns
-spec:
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: external-mdns
-  template:
-    metadata:
-      labels:
-        app: external-mdns
-    spec:
-      securityContext:
-        runAsUser: 65534
-        runAsGroup: 65534
-        runAsNonRoot: true
-      hostNetwork: true
-      serviceAccountName: external-mdns
-      containers:
-      - name: external-mdns
-        securityContext:
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-        image: blakec/external-mdns:latest
-        args:
-        - -source=ingress
-        - -source=service
+To deploy External-mDNS into a cluster without RBAC, use the following command.
+
+```shell
+kubectl apply --kustomize manifests/
 ```
 
-### Manifest (with RBAC)
+To deploy External-mDNS into a cluster with RBAC, use manifests overlay.
 
-```yaml
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: external-mdns
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
- name: external-mdns
-rules:
-- apiGroups: [""]
-  resources: ["services"]
-  verbs: ["list", "watch"]
-- apiGroups: ["extensions","networking.k8s.io"]
-  resources: ["ingresses"]
-  verbs: ["list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
- name: external-mdns-viewer
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: external-mdns
-subjects:
-- kind: ServiceAccount
-  name: external-mdns
-  namespace: default
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: external-mdns
-spec:
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: external-mdns
-  template:
-    metadata:
-      labels:
-        app: external-mdns
-    spec:
-      securityContext:
-        runAsUser: 65534
-        runAsGroup: 65534
-        runAsNonRoot: true
-      hostNetwork: true
-      serviceAccountName: external-mdns
-      containers:
-      - name: external-mdns
-        securityContext:
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-        image: blakec/external-mdns:latest
-        args:
-        - -source=ingress
-        - -source=service
+```shell
+kubectl apply --kustomize manifests/rbac
 ```
 
-Deploy External-mDNS using `kubectl apply --filename external-mdns.yaml`.
+Verify the External-mDNS resources have correctly been deployed using
+`kubectl get`.
+
+### Without RBAC
+
+```shell
+kubectl get --kustomize manifests
+```
+
+### With RBAC
+
+```shell
+kubectl get --kustomize manifests/rbac
+```
+
+## Verifying operation
 
 Check that External-mDNS has created the desired DNS records for your advertised
-services, and that it points to its load balancer's IP.
+services and that they resolve to the correct load balancer or ingress IP by
+using the appropriate command for your operating system.
 
-Test that the record is resolvable from the local LAN using the appropriate
-command for your operating system.
-
-#### BSD/macOS
+### BSD/macOS
 
 ```console
 $ dns-sd -Q example.local a in
@@ -155,14 +76,16 @@ Timestamp     A/R    Flags if Name                          Type  Class   Rdata
 22:50:37.959  Add        2  4 example.local.                Addr   IN     192.0.2.10
 ```
 
-#### Linux
+### Linux
+
+Resolve the hostname using the `getent` command.
 
 ```console
 $ getent hosts example.local
 192.0.2.10      example.local
 ```
 
-Or, resolve the hostname using Avahi.
+Alternatively, you may also attempt to resolve the hostname using Avahi.
 
 ```console
 $ avahi-resolve-address -4 --name example.local
@@ -173,11 +96,11 @@ Note about Linux DNS lookups:
 
 If `/etc/nsswitch.conf` is configured to use the `mdns4_minimal` module,
 `libnss-mdns` will reject the request if the request has more than two labels.
-Example: example.default.local is rejected.
+Example: `example.default.local` is rejected.
 
 In order to resolve hostnames that are published from non-default Kubernetes
 namespaces, modify `/etc/nsswitch.conf` and replace `mdns4_minimal` with `mdns4`.
-Also, create the file `/etc/mdns.allow` and insert the following contents.
+Also, create or modify `/etc/mdns.allow` and add the following contents.
 
 ```text
 # /etc/mdns.allow
