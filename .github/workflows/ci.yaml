@@ -1,0 +1,146 @@
+---
+name: Continuous integration tasks
+on:  # yamllint disable-line rule:truthy
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:  # Allow manual triggering of the workflow
+
+jobs:
+  golang-ci:
+    name: Lint Go code using golangci-lint
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required: allow read access to the content for analysis.
+      contents: read
+      # Allow read access to pull request. Use with `only-new-issues` # option
+      pull-requests: read
+      # Allow write access to checks to allow the action to annotate code in the
+      # PR
+      checks: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          only-new-issues: true
+          problem-matchers: true
+
+  paths-filter:
+    name: Check if Dockerfile or Go code has changed
+    runs-on: ubuntu-latest
+    outputs:
+      modified: ${{ steps.filter.outputs.docker-or-gocode }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if Dockerfile oer Go code has changed
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            docker-or-gocode:
+              - Dockerfile'
+              - '*/**.go'
+
+  docker:
+    name: Build multi-arch container image
+    if: needs.paths-filter.outputs.modified == 'true'
+    runs-on: ubuntu-latest
+    # This job is dependent on the golang-ci job and paths-filter job.
+    # It will only run if the golang-ci job is successful and if the
+    # paths-filter job indicates that the Dockerfile or Go code have changed.
+    needs:
+      - golang-ci
+      - paths-filter
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,arm
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: |
+            blakec/external-mdns
+            ghcr.io/${{ github.repository }}
+
+      - name: Build image and push to local image cache
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: >
+            linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/arm/v5
+          # Load the image into the local image cache instead of pushing it to
+          # a registry. This is useful for testing the image locally.
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  markdownlint:
+    name: Lint markdown files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: tj-actions/changed-files@v45
+        id: changed-files
+        with:
+          files: '**/*.md'
+          separator: ","
+
+      - name: Lint markdown files
+        # This action will only run if there are changed files
+        # It will use the output from the previous step to determine if there
+        # are any changed files
+        # If there are no changed files, it will not run
+        # If there are changed files, it will run and lint them
+        # The output of this step will be the list of changed files
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        if: steps.changed-files.outputs.any_changed == 'true'
+        with:
+          globs: ${{ steps.changed-files.outputs.all_changed_files }}
+          separator: ","
+
+  yamllint:
+    name: Lint YAML files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if YAML files have changed
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            yaml:
+              - '**/*.yaml'
+              - '**/*.yml'
+
+      - name: Lint YAML files
+        if: steps.changes.outputs.yaml == 'true'
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          strict: true

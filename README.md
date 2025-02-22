@@ -27,21 +27,22 @@ advertised with a short name of `<hostname/service_name>.local`.
 ### Additional control for Services
 
 Service discovery is automatic, however, there are some scenarios where one may wish
-to directly control names used with a more general service i.e. the service might be
-in front of an Ingress Controller but the service you wish to use is not defined with
-an Ingress resource such as in the case of non http/https service with nginx.
+to directly control names used with a more general service i.e. the service might
+be in front of an Ingress Controller but the service you wish to use is not defined
+with an Ingress resource such as in the case of non http/https service with nginx.
 
-Other scenarios include non Ingress types that publish a variety of services and act as
-an ingress but have configurations far more complex than can be expressed by an Ingress
-resource e.g. Istio.
+Other scenarios include non Ingress types that publish a variety of services and
+act as an ingress but have configurations far more complex than can be expressed
+by an Ingress resource e.g. Istio.
 
-Additionally, one may wish to control in finer detail which services appear directly on
-.local MDNS advertisements without either moving services to the default namespace or
-enabling the global without-namespace flag.
+Additionally, one may wish to control in finer detail which services appear directly
+on .local MDNS advertisements without either moving services to the default namespace
+or enabling the global without-namespace flag.
 
-In this case Service annotations are possible as follows - these annotations have no effect
-if applied to an Ingress resource.
-```
+In this case Service annotations are possible as follows - these annotations have
+no effect if applied to an Ingress resource.
+
+```yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -55,13 +56,14 @@ spec:
   type: LoadBalancer
 ...
 ```
+
 This example publishes the service using the name foo which will result in the names
 foo.foospace.local, foo-foospace.local and, because we have specified the additional
 annotation foo.local is also published (unnecessary if using the global option).
 
-We urge you to test with the default behaviours for Services and Ingress before using these
-annotations as the automatic nature of external-mdns is good enough for most use cases.
-
+We urge you to test with the default behaviours for Services and Ingress before
+using these annotations as the automatic nature of external-mdns is good enough
+for most use cases.
 
 ## Deploying External-mDNS
 
