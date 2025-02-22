@@ -1,8 +1,10 @@
-build.sh
-Dockerfile
-LICENSE
-README.md
 .DS_Store
 .git/
+.github/
 .gitignore
 .vscode/
+CHANGELOG.md
+Dockerfile
+LICENSE
+manifests/
+README.md

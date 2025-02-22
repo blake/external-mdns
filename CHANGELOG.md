@@ -1,3 +1,4 @@
+<!-- markdownlint-disable-next-line MD041 -->
 ## 0.5.0 (September 27, 2023)
 
 IMPROVEMENTS:

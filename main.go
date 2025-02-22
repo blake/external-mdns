@@ -252,10 +252,10 @@ func main() {
 		switch src {
 		case "ingress":
 			ingressController := source.NewIngressWatcher(factory, namespace, notifyMdns)
-			go ingressController.Run(stopper)
+			go ingressController.Run(stopper) //nolint
 		case "service":
 			serviceController := source.NewServicesWatcher(factory, namespace, notifyMdns, publishInternal)
-			go serviceController.Run(stopper)
+			go serviceController.Run(stopper) //nolint
 		}
 	}
 

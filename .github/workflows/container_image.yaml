@@ -1,0 +1,131 @@
+---
+name: Build and push container image to image registries
+on:  # yamllint disable-line rule:truthy
+  push:
+    tags:
+      - "v*.*.*"
+  release:
+    types:
+      - published
+      - released
+  workflow_dispatch:  # Allow manual triggering of the workflow
+    inputs:
+      push_to_docker_hub:
+        description: 'Push image to Docker Hub'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+
+  push_to_registries:
+    name: Push image to container registries
+    runs-on: ubuntu-latest
+    env:
+      # The registries to push the image to
+      DOCKER_REGISTRY: docker.io
+      DOCKER_USERNAME: "${{ secrets.DOCKER_USERNAME }}"
+      GITHUB_REGISTRY: ghcr.io
+      # The name of the image to push
+      IMAGE_NAME: external-mdns
+
+    permissions:
+      # Permit generating an artifact attestation for the image
+      attestations: write
+      # Permits an action to list the commits
+      contents: read
+      # Fetch an OpenID Connect (OIDC) token
+      id-token: write
+      # Permit uploading and publishing packages on GitHub Packages.
+      packages: write
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,arm
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@906ecf0fc0a80f9110f79d9e6c04b1080f4a2621
+        env:
+          # Attach metadata annotations to both the image index and the manifest
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index,manifest
+        with:
+          # yamllint disable rule:line-length
+          images: |
+            name=${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }},enable=${{ github.event_name != 'workflow_dispatch' || (github.event_name == 'workflow_dispatch' && inputs.push_to_docker_hub == true) }}
+            name=${{ env.GITHUB_REGISTRY }}/${{ github.repository }}
+          # Disable generating the 'latest' tag on the image.
+          # It will be conditionally tagged later in the workflow.
+          flavor: |
+            latest=false
+          annotations: |
+            # The date the image was created
+            org.opencontainers.image.created={{date 'YYYY-MM-DDTHH:mm:ss.SSS[Z]'}}
+            org.opencontainers.image.revision={{sha}}
+            org.opencontainers.image.source=${{ github.event.repository.html_url }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.version={{tag}}
+          tags: |
+            # '{{version}}' results in a tag of '<major>.<minor>.<patch>'
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+            # Results in the image being tagged with same value as the Git tag
+            # (e.g.,'v<major>.<minor>.<patch>')
+            type=pep440,pattern={{raw}}
+
+            # set 'latest' tag on the image if the following conditions are met:
+            # 1. The event is a push
+            # 2. The base branch is the default branch
+            # 3. The GitHub reference starts with 'refs/tags/v'
+            # (i.e., the event is a tag release)
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.event.base_ref == format('refs/heads/{0}', github.event.repository.default_branch) && startsWith(github.ref, 'refs/tags/v') }}
+
+            # Tag the image with the commit SHA when manually triggered and is not
+            # a tag release. This is useful for testing and debugging.
+            type=sha,enable=${{ github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'ref/tags/v') }}
+          # yamllint enable rule:line-length
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        if: github.event_name != 'workflow_dispatch' || inputs.push_to_docker_hub == true  # yamllint disable-line rule:line-length
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Login to GitHub Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.GITHUB_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push container image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: >
+            linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/arm/v5
+          push: ${{ github.event_name != 'pull_request' }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          # Use the same annotations as labels on the image
+          labels: ${{ steps.meta.outputs.annotations }}
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.GITHUB_REGISTRY }}/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
