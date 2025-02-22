@@ -1,0 +1,18 @@
+apiVersion: skaffold/v4beta8
+kind: Config
+build:
+  artifacts:
+  - image: external-mdns
+    context: .
+    docker:
+      dockerfile: Dockerfile
+  local:
+    push: false
+deploy:
+  kubectl: {}
+manifests:
+  rawYaml:
+      - manifests/k8s-deployment-template.yaml
+      - manifests/k8s-service-account.yaml
+      - manifests/k8s-cluster-role.yaml
+      - manifests/k8s-cluster-role-binding.yaml
