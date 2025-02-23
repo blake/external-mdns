@@ -1,4 +1,4 @@
-
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,13 +21,13 @@ spec:
       hostNetwork: true
       serviceAccountName: external-mdns
       containers:
-      - name: external-mdns
-        securityContext:
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-        image: blakec/external-mdns:latest
-        args:
-        - -source=ingress
-        - -source=service
+        - name: external-mdns
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          image: blakec/external-mdns:latest
+          args:
+            - -source=ingress
+            - -source=service
