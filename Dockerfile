@@ -1,11 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.16 as build
-LABEL maintainer="Blake Covarrubias <blake@covarrubi.as>" \
-      org.opencontainers.image.authors="Blake Covarrubias <blake@covarrubi.as>" \
-      org.opencontainers.image.description="Advertises records for Kubernetes resources over multicast DNS." \
-      org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.source="git@github.com:blake/external-mdns" \
-      org.opencontainers.image.title="external-mdns" \
-      org.opencontainers.image.url="https://github.com/blake/external-mdns"
+FROM --platform=$BUILDPLATFORM golang:1.16 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -23,6 +16,16 @@ RUN mkdir -p /release/etc &&\
 
 
 FROM scratch
+
+LABEL maintainer="Blake Covarrubias <blake@covarrubi.as>" \
+      org.opencontainers.image.authors="Blake Covarrubias <blake@covarrubi.as>" \
+      org.opencontainers.image.description="Advertises records for Kubernetes resources over multicast DNS." \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/blake/external-mdns" \
+      org.opencontainers.image.title="external-mdns" \
+      org.opencontainers.image.url="https://github.com/blake/external-mdns" \
+      org.opencontainers.image.vendor="Blake Covarrubias"
+
 COPY --from=build /release /
 USER nobody
 ENTRYPOINT ["/external-mdns"]
