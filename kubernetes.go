@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 
 	homedir "github.com/mitchellh/go-homedir"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -66,4 +67,12 @@ func newK8sClient() (*kubernetes.Clientset, error) {
 		return nil, err
 	}
 	return k8sClient, nil
+}
+
+func newK8sInformerFactory() (informers.SharedInformerFactory, error) {
+	k8sClient, err := newK8sClient()
+	if err != nil {
+		return nil, err
+	}
+	return informers.NewSharedInformerFactory(k8sClient, 0), nil
 }

@@ -125,7 +125,7 @@ func (z *zone) mainloop() {
 				z.entries = make(map[string]entries)
 			}
 		case q := <-z.queries:
-			for _, entry := range z.entries[q.Question.Name] {
+			for _, entry := range z.entries[q.Name] {
 				if q.matches(entry) {
 					q.result <- entry
 				}
@@ -150,7 +150,7 @@ func (z *zone) query(q dns.Question) (entries []*entry) {
 }
 
 func (q *query) matches(entry *entry) bool {
-	return q.Question.Qtype == dns.TypeANY || q.Question.Qtype == entry.RR.Header().Rrtype
+	return q.Qtype == dns.TypeANY || q.Qtype == entry.RR.Header().Rrtype
 }
 
 type connector struct {
@@ -207,12 +207,12 @@ func (c *connector) mainloop() {
 	go c.readloop(in)
 	for {
 		msg := <-in
-		msg.MsgHdr.Response = true      // convert question to response
-		msg.MsgHdr.Authoritative = true // answer should be authoritative otherwise it may be discarded
+		msg.Response = true      // convert question to response
+		msg.Authoritative = true // answer should be authoritative otherwise it may be discarded
 
 		// https://datatracker.ietf.org/doc/html/rfc6762#section-6.7
 		// if source port is not 5353 then it's "One-Shot Multicast DNS Query" and we should send unicast response
-		isLegacyUnicast := msg.UDPAddr.Port != 5353
+		isLegacyUnicast := msg.Port != 5353
 
 		msg.Answer = make([]dns.RR, 0) // some queries already have an answer, we should not answer them
 		for _, result := range c.query(msg.Question) {

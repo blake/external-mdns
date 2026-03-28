@@ -154,11 +154,14 @@ func NewIngressWatcher(factory informers.SharedInformerFactory, namespace string
 		sharedInformer: ingressInformer,
 	}
 
-	ingressInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := ingressInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    i.onAdd,
 		DeleteFunc: i.onDelete,
 		UpdateFunc: i.onUpdate,
 	})
+	if err != nil {
+		log.Printf("Add Ingress watcher error %s\n", err)
+	}
 
 	return *i
 }

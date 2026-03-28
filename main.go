@@ -37,7 +37,7 @@ func (s *k8sSource) String() string {
 
 func (s *k8sSource) Set(value string) error {
 	switch value {
-	case "ingress", "service":
+	case "ingress", "service", "gateway":
 		*s = append(*s, value)
 	}
 	return nil
@@ -237,24 +237,40 @@ func main() {
 	// Print parsed configuration
 	log.Printf("app.config %v\n", getConfig(flag.CommandLine))
 
-	k8sClient, err := newK8sClient()
-	if err != nil {
-		log.Fatalln("Failed to create Kubernetes client:", err)
-	}
-
 	notifyMdns := make(chan resource.Resource)
 	stopper := make(chan struct{})
 	defer close(stopper)
 	defer runtime.HandleCrash()
 
-	factory := informers.NewSharedInformerFactory(k8sClient, 0)
+	var kubeFactory informers.SharedInformerFactory
 	for _, src := range sourceFlag {
 		switch src {
 		case "ingress":
-			ingressController := source.NewIngressWatcher(factory, namespace, notifyMdns)
+			if kubeFactory == nil {
+				factory, err := newK8sInformerFactory()
+				if err != nil {
+					log.Fatalln("Failed to create Kubernetes client:", err)
+				}
+				kubeFactory = factory
+			}
+			ingressController := source.NewIngressWatcher(kubeFactory, namespace, notifyMdns)
 			go ingressController.Run(stopper) //nolint
+		case "gateway":
+			gatewayFactory, err := newGWK8sInformerFactory()
+			if err != nil {
+				log.Fatalln("Failed to create Kubernetes GatewayAPI client:", err)
+			}
+			gatewayController := source.NewGatewayWatcher(gatewayFactory, namespace, notifyMdns)
+			go gatewayController.Run(stopper) //nolint
 		case "service":
-			serviceController := source.NewServicesWatcher(factory, namespace, notifyMdns, publishInternal)
+			if kubeFactory == nil {
+				factory, err := newK8sInformerFactory()
+				if err != nil {
+					log.Fatalln("Failed to create Kubernetes client:", err)
+				}
+				kubeFactory = factory
+			}
+			serviceController := source.NewServicesWatcher(kubeFactory, namespace, notifyMdns, publishInternal)
 			go serviceController.Run(stopper) //nolint
 		}
 	}

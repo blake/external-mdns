@@ -16,6 +16,7 @@ package source
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/blake/external-mdns/resource"
@@ -135,11 +136,14 @@ func NewServicesWatcher(factory informers.SharedInformerFactory, namespace strin
 		notifyChan:      notifyChan,
 		sharedInformer:  servicesInformer,
 	}
-	servicesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := servicesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    s.onAdd,
 		DeleteFunc: s.onDelete,
 		UpdateFunc: s.onUpdate,
 	})
+	if err != nil {
+		log.Printf("Add Service watcher error %s\n", err)
+	}
 
 	return *s
 }

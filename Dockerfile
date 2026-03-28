@@ -1,10 +1,10 @@
-FROM --platform=$BUILDPLATFORM golang:1.16 AS build
+FROM --platform=$BUILDPLATFORM golang:1.25 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
 
-ADD . /go/src/github.com/blake/external-mdns
+COPY . /go/src/github.com/blake/external-mdns
 WORKDIR /go/src/github.com/blake/external-mdns
 
 RUN mkdir -p /release/etc &&\
